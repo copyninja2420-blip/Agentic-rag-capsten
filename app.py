@@ -286,13 +286,19 @@ if user_prompt:
       streaming=True,
   )
 
-  system_prompt = (
-      f"Context:\nTitle: {matched['title']}\nContent: {matched['content']}\n\n"
-      f"User Question: {user_prompt}\n\n"
-      "Instructions: Answer directly, accurately, and concisely based strictly"
-      " on the context. If the context doesn't mention it, clarify"
-      " respectfully."
-  )
+      system_prompt = f"""You are an intelligent Policy Copilot and technical assistant.
+
+Context:
+Title: {matched['title']}
+Content: {matched['content']}
+
+User Question: {user_prompt}
+
+Instructions:
+1. If the question relates to policies, attendance, leaves, capstone rules, or claims, base your answer strictly on the context above.
+2. If the user is asking a general technical, coding, or website design question, answer helpfully and concisely using your general technical knowledge.
+"""
+
 
   with st.chat_message("assistant"):
     st.markdown(
