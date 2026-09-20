@@ -27,7 +27,6 @@ st.markdown(
         color: #f3f4f6;
     }
     
-    /* Responsive Hero Header */
     .hero-container {
         padding: 1.25rem;
         background: #111827;
@@ -72,7 +71,6 @@ st.markdown(
         white-space: nowrap;
     }
 
-    /* Message Bubbles */
     .stChatMessage {
         border-radius: 12px !important;
         background: #111827 !important;
@@ -81,7 +79,6 @@ st.markdown(
         padding: 10px 14px !important;
     }
 
-    /* Source Tag */
     .source-tag {
         display: inline-block;
         font-size: 0.72rem;
@@ -94,7 +91,6 @@ st.markdown(
         font-weight: 500;
     }
 
-    /* Buttons */
     .stButton > button {
         border-radius: 10px;
         border: 1px solid #374151;
@@ -113,7 +109,7 @@ st.markdown(
 )
 
 # -------------------------------------------------------------
-# Knowledge Base & Retrieval
+# Knowledge Base & Fast Keyword Matching
 # -------------------------------------------------------------
 POLICY_DB = [
     {
@@ -244,7 +240,7 @@ st.markdown(
             <h1 class="hero-title">NexusPolicy AI</h1>
             <span class="status-badge">● Online</span>
         </div>
-        <div class="hero-subtitle">Instant Grounded Policy & Institutional Guidelines Copilot</div>
+        <div class="hero-subtitle">Instant Grounded Policy & Technical Assistance Copilot</div>
     </div>
 """,
     unsafe_allow_html=True,
@@ -255,7 +251,8 @@ if "messages" not in st.session_state:
       "role": "assistant",
       "content": (
           "Hello! Ask any question regarding institutional guidelines,"
-          " attendance criteria, or capstone deliverables."
+          " attendance criteria, capstone deliverables, or technical coding"
+          " questions."
       ),
   }]
 
@@ -264,7 +261,7 @@ for msg in st.session_state.messages:
     st.markdown(msg["content"])
 
 prompt_from_chip = st.session_state.pop("pending_prompt", None)
-user_prompt = st.chat_input("Ask any guideline or rule...") or prompt_from_chip
+user_prompt = st.chat_input("Ask any question or guideline...") or prompt_from_chip
 
 if user_prompt:
   if not groq_key:
@@ -275,34 +272,27 @@ if user_prompt:
   with st.chat_message("user"):
     st.markdown(user_prompt)
 
-  # Retrieve context
   matched = fast_retrieve(user_prompt)
 
-  # Ultra-fast Groq model
   llm = ChatGroq(
       model="openai/gpt-oss-20b",
       api_key=groq_key,
-      temperature=0.1,
+      temperature=0.2,
       streaming=True,
   )
 
-      system_prompt = f"""You are an intelligent Policy Copilot and technical assistant.
-
-Context:
-Title: {matched['title']}
-Content: {matched['content']}
-
-User Question: {user_prompt}
-
-Instructions:
-1. If the question relates to policies, attendance, leaves, capstone rules, or claims, base your answer strictly on the context above.
-2. If the user is asking a general technical, coding, or website design question, answer helpfully and concisely using your general technical knowledge.
-"""
-
+  system_prompt = (
+      "You are an intelligent Policy Copilot and technical assistant.\n\n"
+      f"Context:\nTitle: {matched['title']}\nContent: {matched['content']}\n\n"
+      f"User Question: {user_prompt}\n\n"
+      "Instructions:\n"
+      "1. If the question relates to policies, attendance, leaves, capstones, or expenses, base your answer strictly on the context.\n"
+      "2. If the user asks a general technical, coding, or website design question, answer helpfully, clearly, and concisely using your general knowledge."
+  )
 
   with st.chat_message("assistant"):
     st.markdown(
-        f'<span class="source-tag">📄 Source: {matched["title"]}</span>',
+        f'<span class="source-tag">📄 Context: {matched["title"]}</span>',
         unsafe_allow_html=True,
     )
 
