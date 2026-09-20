@@ -5,90 +5,172 @@ from pypdf import PdfReader
 import streamlit as st
 
 st.set_page_config(
-    page_title="NexusDoc AI • Smart Document Copilot",
+    page_title="NexusDoc AI • Enterprise Copilot",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
-# Responsive Dark Styling
+# -------------------------------------------------------------
+# Dynamic Sidebar Theme & Branding Controls
+# -------------------------------------------------------------
+with st.sidebar:
+  st.markdown("### 🎨 **Brand & Theme Settings**")
+
+  brand_name = st.text_input("Brand / Client Name:", value="NexusDoc AI")
+
+  theme_choice = st.selectbox(
+      "Accent Theme Color:",
+      ["Electric Blue", "Emerald Mint", "Cyber Violet", "Sunset Gold"],
+  )
+
+  theme_colors = {
+      "Electric Blue": {"primary": "#38bdf8", "border": "#0284c7"},
+      "Emerald Mint": {"primary": "#34d399", "border": "#059669"},
+      "Cyber Violet": {"primary": "#c084fc", "border": "#9333ea"},
+      "Sunset Gold": {"primary": "#fbbf24", "border": "#d97706"},
+  }
+  selected_color = theme_colors[theme_choice]["primary"]
+  selected_border = theme_colors[theme_choice]["border"]
+
+  st.markdown("---")
+  st.markdown("### ⚙️ **Engine Config**")
+  groq_key = os.environ.get("GROQ_API_KEY")
+  if not groq_key:
+    groq_key = st.text_input("Enter Groq API Key:", type="password")
+
+  st.markdown("---")
+  st.markdown("### 📁 **Upload Custom Document**")
+  uploaded_pdf = st.file_uploader("Upload PDF File", type=["pdf"])
+
+  st.markdown("---")
+  st.markdown("**Suggested Prompts:**")
+  presets = [
+      "What is the minimum attendance required?",
+      "Can I take 4 consecutive days of leave?",
+      "What are the capstone submission deliverables?",
+      "Summarize the active document.",
+  ]
+  for p in presets:
+    if st.button(p, use_container_width=True):
+      st.session_state.pending_prompt = p
+
+  st.markdown("---")
+  if st.button("🗑️ Clear Chat", use_container_width=True):
+    st.session_state.messages = []
+    st.rerun()
+
+# -------------------------------------------------------------
+# Responsive Modern Styling with Dynamic Accents
+# -------------------------------------------------------------
 st.markdown(
-    """
+    f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-    * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
-    .stApp { background-color: #0b0f19; color: #f3f4f6; }
-    .hero-container {
-        padding: 1.25rem;
+    * {{ font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }}
+    .stApp {{ background-color: #0b0f19; color: #f3f4f6; }}
+    
+    .hero-container {{
+        padding: 1.15rem 1.4rem;
         background: #111827;
         border: 1px solid #1f2937;
         border-radius: 14px;
         margin-bottom: 1.2rem;
-    }
-    .hero-header-row {
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+    }}
+    
+    .hero-header-row {{
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
+        gap: 12px;
         flex-wrap: wrap;
-    }
-    .hero-title {
-        font-size: clamp(1.25rem, 5vw, 1.85rem) !important;
+    }}
+
+    .brand-group {{
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }}
+
+    .brand-avatar {{
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, {selected_color}, {selected_border});
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #0b0f19;
+        font-weight: 800;
+        font-size: 1.1rem;
+        box-shadow: 0 0 15px {selected_color}44;
+    }}
+
+    .hero-title {{
+        font-size: clamp(1.2rem, 4.5vw, 1.75rem) !important;
         font-weight: 800 !important;
-        color: #60a5fa !important;
+        color: {selected_color} !important;
         line-height: 1.2 !important;
         margin: 0 !important;
-        word-break: keep-all;
         white-space: nowrap;
-    }
-    .hero-subtitle {
+    }}
+    
+    .hero-subtitle {{
         color: #9ca3af;
-        font-size: 0.85rem;
+        font-size: 0.84rem;
         margin-top: 0.35rem;
         line-height: 1.4;
-    }
-    .status-badge {
+    }}
+    
+    .status-badge {{
         background: rgba(16, 185, 129, 0.15);
         color: #34d399;
         border: 1px solid rgba(16, 185, 129, 0.3);
         padding: 3px 10px;
         border-radius: 9999px;
-        font-size: 0.75rem;
+        font-size: 0.72rem;
         font-weight: 600;
         white-space: nowrap;
-    }
-    .stChatMessage {
+    }}
+
+    .stChatMessage {{
         border-radius: 12px !important;
         background: #111827 !important;
         border: 1px solid #1f2937 !important;
         margin-bottom: 8px !important;
         padding: 10px 14px !important;
-    }
-    .source-tag {
+    }}
+
+    .source-tag {{
         display: inline-block;
         font-size: 0.72rem;
-        background: rgba(96, 165, 250, 0.15);
-        color: #93c5fd;
+        background: {selected_color}18;
+        color: {selected_color};
         padding: 2px 8px;
         border-radius: 4px;
         margin-bottom: 6px;
-        border: 1px solid rgba(96, 165, 250, 0.3);
+        border: 1px solid {selected_color}44;
         font-weight: 500;
-    }
-    .stButton > button {
+    }}
+
+    .stButton > button {{
         border-radius: 10px;
         border: 1px solid #374151;
         background: #1f2937;
         color: #e5e7eb;
         font-size: 0.82rem;
         padding: 0.45rem 0.8rem;
-    }
-    .stButton > button:hover { border-color: #60a5fa; color: #ffffff; }
+    }}
+    .stButton > button:hover {{ border-color: {selected_color}; color: #ffffff; }}
     </style>
 """,
     unsafe_allow_html=True,
 )
 
+# -------------------------------------------------------------
+# Knowledge Base & Retrieval Logic
+# -------------------------------------------------------------
 DEFAULT_POLICIES = [
     {
         "id": "attendance",
@@ -130,8 +212,8 @@ DEFAULT_POLICIES = [
 ]
 
 
-def extract_pdf_chunks(uploaded_file):
-  reader = PdfReader(uploaded_file)
+def extract_pdf_chunks(pdf_file):
+  reader = PdfReader(pdf_file)
   full_text = ""
   for page in reader.pages:
     text = page.extract_text()
@@ -145,7 +227,7 @@ def extract_pdf_chunks(uploaded_file):
     chunk_str = " ".join(words[i : i + chunk_size])
     chunks.append({
         "id": f"chunk_{i}",
-        "title": f"{uploaded_file.name} (Part {i//chunk_size + 1})",
+        "title": f"{pdf_file.name} (Part {i//chunk_size + 1})",
         "content": chunk_str,
     })
   return chunks if chunks else DEFAULT_POLICIES
@@ -166,61 +248,40 @@ def score_and_retrieve(query: str, doc_list: list):
   return best_doc
 
 
-with st.sidebar:
-  st.markdown("### ⚙️ **Control Panel**")
-  groq_key = os.environ.get("GROQ_API_KEY")
-  if not groq_key:
-    groq_key = st.text_input("Enter Groq API Key:", type="password")
+# Handle document source
+if uploaded_pdf is not None:
+  if (
+      "current_pdf_name" not in st.session_state
+      or st.session_state.current_pdf_name != uploaded_pdf.name
+  ):
+    with st.spinner("Indexing PDF..."):
+      st.session_state.active_docs = extract_pdf_chunks(uploaded_pdf)
+      st.session_state.current_pdf_name = uploaded_pdf.name
+else:
+  st.session_state.active_docs = DEFAULT_POLICIES
+  st.session_state.current_pdf_name = "Institutional Policies"
 
-  st.markdown("---")
-  st.markdown("### 📁 **Upload Custom Document**")
-  uploaded_pdf = st.file_uploader("Upload PDF File", type=["pdf"])
-
-  if uploaded_pdf is not None:
-    if (
-        "current_pdf_name" not in st.session_state
-        or st.session_state.current_pdf_name != uploaded_pdf.name
-    ):
-      with st.spinner("Extracting PDF contents..."):
-        custom_chunks = extract_pdf_chunks(uploaded_pdf)
-        st.session_state.active_docs = custom_chunks
-        st.session_state.current_pdf_name = uploaded_pdf.name
-      st.success(
-          f"Indexed {len(st.session_state.active_docs)} sections from"
-          f" '{uploaded_pdf.name}'!"
-      )
-  else:
-    st.session_state.active_docs = DEFAULT_POLICIES
-    st.session_state.current_pdf_name = "Default Policies"
-
-  st.markdown("---")
-  st.markdown("**Suggested Prompts:**")
-  presets = [
-      "What is the minimum attendance required?",
-      "Can I take 4 consecutive days of leave?",
-      "What are the capstone submission deliverables?",
-      "Summarize the active document.",
-  ]
-  for p in presets:
-    if st.button(p, use_container_width=True):
-      st.session_state.pending_prompt = p
-
-  st.markdown("---")
-  if st.button("🗑️ Clear Chat", use_container_width=True):
-    st.session_state.messages = []
-    st.rerun()
-
+# -------------------------------------------------------------
+# Hero UI
+# -------------------------------------------------------------
 active_source_label = st.session_state.get(
-    "current_pdf_name", "Default Policies"
+    "current_pdf_name", "Institutional Policies"
 )
+first_initial = brand_name.strip()[0].upper() if brand_name.strip() else "N"
+
 st.markdown(
     f"""
     <div class="hero-container">
         <div class="hero-header-row">
-            <h1 class="hero-title">NexusDoc AI</h1>
-            <span class="status-badge">● Active: {active_source_label[:20]}</span>
+            <div class="brand-group">
+                <div class="brand-avatar">{first_initial}</div>
+                <div>
+                    <h1 class="hero-title">{brand_name}</h1>
+                    <div class="hero-subtitle">Intelligent RAG Assistant • Active Source: {active_source_label[:22]}</div>
+                </div>
+            </div>
+            <span class="status-badge">● Online</span>
         </div>
-        <div class="hero-subtitle">Upload any PDF in the sidebar or query institutional policies.</div>
     </div>
 """,
     unsafe_allow_html=True,
@@ -230,8 +291,8 @@ if "messages" not in st.session_state:
   st.session_state.messages = [{
       "role": "assistant",
       "content": (
-          "Hello! You can ask questions about our institutional policies or"
-          " upload any PDF in the sidebar to extract answers from it instantly."
+          f"Welcome to **{brand_name}**! Ask questions regarding the active"
+          " documentation or upload your custom PDF in the sidebar."
       ),
   }]
 
@@ -261,7 +322,7 @@ if user_prompt:
   )
 
   system_prompt = (
-      "You are an intelligent Document Copilot and technical assistant.\n\n"
+      f"You are the official intelligence copilot for {brand_name}.\n\n"
       f"Context Source: {matched['title']}\n"
       f"Context Excerpt:\n{matched['content']}\n\n"
       f"User Question: {user_prompt}\n\n"
