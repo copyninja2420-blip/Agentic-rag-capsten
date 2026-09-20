@@ -266,11 +266,12 @@ if user_prompt:
 
   # 2. Real-time streaming via Groq LPU
   llm = ChatGroq(
-      model="llama-3.3-70b-versatile",
-      api_key=groq_key,
-      temperature=0.1,
-      streaming=True,
+    model="openai/gpt-oss-20b",
+    api_key=groq_key,
+    temperature=0.1,
+    streaming=True,
   )
+    
 
   system_prompt = (
       f"Context:\nTitle: {matched['title']}\nContent: {matched['content']}\n\n"
