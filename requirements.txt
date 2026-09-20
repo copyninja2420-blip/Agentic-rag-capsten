@@ -1,4 +1,6 @@
 streamlit
 langchain-groq
+pypdf
+
 
 
