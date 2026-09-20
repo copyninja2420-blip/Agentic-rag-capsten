@@ -1,6 +1,4 @@
 streamlit
 langchain-groq
-sentence-transformers
-torchvision
-chromadb
+
 
