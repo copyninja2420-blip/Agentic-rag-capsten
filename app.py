@@ -251,7 +251,13 @@ with st.expander("📁 **Upload Document, Photo, or Video (Tap to Open)**", expa
         # Handle Images (JPG, PNG)
         elif file_ext in ["png", "jpg", "jpeg"]:
             image = Image.open(uploaded_file)
-            st.image(image, caption=f"Uploaded Image: {uploaded_file.name}", use_column_width=True)
+            # New line:
+st.image(
+    image,
+    caption=f"Uploaded Image: {uploaded_file.name}",
+    use_container_width=True,
+)
+
             
             # Read bytes for multimodal processing
             uploaded_file.seek(0)
