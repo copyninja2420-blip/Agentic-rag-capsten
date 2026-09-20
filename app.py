@@ -1,17 +1,20 @@
-import os
+
+        
+                  import os
 import re
 from langchain_groq import ChatGroq
+from pypdf import PdfReader
 import streamlit as st
 
 st.set_page_config(
-    page_title="NexusPolicy • AI Copilot",
+    page_title="NexusDoc AI • Smart Document Copilot",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 # -------------------------------------------------------------
-# Modern Responsive Mobile-First Styling
+# Responsive Mobile-First Styling
 # -------------------------------------------------------------
 st.markdown(
     """
@@ -109,9 +112,9 @@ st.markdown(
 )
 
 # -------------------------------------------------------------
-# Knowledge Base & Fast Keyword Matching
+# Default Knowledge Base
 # -------------------------------------------------------------
-POLICY_DB = [
+DEFAULT_POLICIES = [
     {
         "id": "attendance",
         "title": "Attendance & Eligibility Rules",
@@ -121,15 +124,6 @@ POLICY_DB = [
             " certification. Candidates falling below 80% require academic"
             " condonation."
         ),
-        "keywords": [
-            "attendance",
-            "present",
-            "absent",
-            "percentage",
-            "exam",
-            "qualification",
-            "certification",
-        ],
     },
     {
         "id": "leave",
@@ -139,15 +133,6 @@ POLICY_DB = [
             " leave with written notice. Leaves exceeding 3 days require"
             " medical or formal verification submitted in advance."
         ),
-        "keywords": [
-            "leave",
-            "sick",
-            "days",
-            "vacation",
-            "absence",
-            "off",
-            "consecutive",
-        ],
     },
     {
         "id": "capstone",
@@ -157,15 +142,6 @@ POLICY_DB = [
             " Public GitHub repository. 2) README with architecture diagram. 3)"
             " Live demo URL. Late submissions face a 10% daily grade deduction."
         ),
-        "keywords": [
-            "capstone",
-            "submission",
-            "github",
-            "deadline",
-            "project",
-            "guidelines",
-            "diagram",
-        ],
     },
     {
         "id": "reimbursement",
@@ -175,28 +151,40 @@ POLICY_DB = [
             " require prior manager approval. Digital receipts must be submitted"
             " within 7 business days."
         ),
-        "keywords": [
-            "expense",
-            "travel",
-            "claim",
-            "reimbursement",
-            "money",
-            "budget",
-            "receipt",
-        ],
     },
 ]
 
 
-def fast_retrieve(query: str):
+def extract_pdf_chunks(uploaded_file):
+  reader = PdfReader(uploaded_file)
+  full_text = ""
+  for page in reader.pages:
+    text = page.extract_text()
+    if text:
+      full_text += text + "\n"
+
+  # Split text into bite-sized chunks (~400 words each)
+  words = full_text.split()
+  chunk_size = 350
+  chunks = []
+  for i in range(0, len(words), chunk_size):
+    chunk_str = " ".join(words[i : i + chunk_size])
+    chunks.append({
+        "id": f"chunk_{i}",
+        "title": f"{uploaded_file.name} (Part {i//chunk_size + 1})",
+        "content": chunk_str,
+    })
+  return chunks
+
+
+def score_and_retrieve(query: str, doc_list: list):
   q_tokens = set(re.findall(r"\w+", query.lower()))
-  best_doc = POLICY_DB[0]
+  best_doc = doc_list[0]
   best_score = -1
 
-  for item in POLICY_DB:
-    score = sum(2 for k in item["keywords"] if k in q_tokens)
+  for item in doc_list:
     doc_words = set(re.findall(r"\w+", item["content"].lower()))
-    score += len(q_tokens.intersection(doc_words))
+    score = len(q_tokens.intersection(doc_words))
     if score > best_score:
       best_score = score
       best_doc = item
@@ -205,21 +193,42 @@ def fast_retrieve(query: str):
 
 
 # -------------------------------------------------------------
-# Sidebar
+# Sidebar & File Upload
 # -------------------------------------------------------------
 with st.sidebar:
-  st.markdown("### ⚙️ **Settings & Prompts**")
+  st.markdown("### ⚙️ **Control Panel**")
   groq_key = os.environ.get("GROQ_API_KEY")
   if not groq_key:
     groq_key = st.text_input("Enter Groq API Key:", type="password")
 
   st.markdown("---")
-  st.markdown("**Suggested Questions:**")
+  st.markdown("### 📁 **Upload Custom Document**")
+  uploaded_pdf = st.file_uploader("Upload PDF File", type=["pdf"])
+
+  if uploaded_pdf is not None:
+    if (
+        "current_pdf_name" not in st.session_state
+        or st.session_state.current_pdf_name != uploaded_pdf.name
+    ):
+      with st.spinner("Extracting and indexing PDF..."):
+        custom_chunks = extract_pdf_chunks(uploaded_pdf)
+        st.session_state.active_docs = custom_chunks
+        st.session_state.current_pdf_name = uploaded_pdf.name
+      st.success(
+          f"Indexed {len(st.session_state.active_docs)} sections from"
+          f" '{uploaded_pdf.name}'!"
+      )
+  else:
+    st.session_state.active_docs = DEFAULT_POLICIES
+    st.session_state.current_pdf_name = "Default Policies"
+
+  st.markdown("---")
+  st.markdown("**Suggested Prompts:**")
   presets = [
       "What is the minimum attendance required?",
       "Can I take 4 consecutive days of leave?",
       "What are the capstone submission deliverables?",
-      "What is the policy on travel expenses?",
+      "Summarize the uploaded document.",
   ]
   for p in presets:
     if st.button(p, use_container_width=True):
@@ -233,14 +242,17 @@ with st.sidebar:
 # -------------------------------------------------------------
 # Responsive Hero UI
 # -------------------------------------------------------------
+active_source_label = st.session_state.get(
+    "current_pdf_name", "Default Policies"
+)
 st.markdown(
-    """
+    f"""
     <div class="hero-container">
         <div class="hero-header-row">
-            <h1 class="hero-title">NexusPolicy AI</h1>
-            <span class="status-badge">● Online</span>
+            <h1 class="hero-title">NexusDoc AI</h1>
+            <span class="status-badge">● Active: {active_source_label[:20]}</span>
         </div>
-        <div class="hero-subtitle">Instant Grounded Policy & Technical Assistance Copilot</div>
+        <div class="hero-subtitle">Upload any PDF in the sidebar or ask questions about existing policies.</div>
     </div>
 """,
     unsafe_allow_html=True,
@@ -250,9 +262,9 @@ if "messages" not in st.session_state:
   st.session_state.messages = [{
       "role": "assistant",
       "content": (
-          "Hello! Ask any question regarding institutional guidelines,"
-          " attendance criteria, capstone deliverables, or technical coding"
-          " questions."
+          "Hello! You can ask questions about our institutional policies or"
+          " upload any custom PDF document in the sidebar to query it"
+          " instantly."
       ),
   }]
 
@@ -272,27 +284,32 @@ if user_prompt:
   with st.chat_message("user"):
     st.markdown(user_prompt)
 
-  matched = fast_retrieve(user_prompt)
+  # Retrieve relevant context from current active document set
+  matched = score_and_retrieve(user_prompt, st.session_state.active_docs)
 
   llm = ChatGroq(
       model="openai/gpt-oss-20b",
       api_key=groq_key,
-      temperature=0.2,
+      temperature=0.1,
       streaming=True,
   )
 
   system_prompt = (
-      "You are an intelligent Policy Copilot and technical assistant.\n\n"
-      f"Context:\nTitle: {matched['title']}\nContent: {matched['content']}\n\n"
+      "You are an intelligent Document Copilot and technical assistant.\n\n"
+      f"Context Source: {matched['title']}\n"
+      f"Context Excerpt:\n{matched['content']}\n\n"
       f"User Question: {user_prompt}\n\n"
       "Instructions:\n"
-      "1. If the question relates to policies, attendance, leaves, capstones, or expenses, base your answer strictly on the context.\n"
-      "2. If the user asks a general technical, coding, or website design question, answer helpfully, clearly, and concisely using your general knowledge."
+      "1. If the question relates to the provided document context, answer"
+      " accurately and cite the context directly.\n"
+      "2. If the user asks a general coding, engineering, or technical"
+      " question outside the document, answer clearly and helpfully using your"
+      " general technical knowledge."
   )
 
   with st.chat_message("assistant"):
     st.markdown(
-        f'<span class="source-tag">📄 Context: {matched["title"]}</span>',
+        f'<span class="source-tag">📄 Source: {matched["title"]}</span>',
         unsafe_allow_html=True,
     )
 
@@ -305,4 +322,5 @@ if user_prompt:
 
   st.session_state.messages.append(
       {"role": "assistant", "content": response_text}
-  )
+          )
+    
