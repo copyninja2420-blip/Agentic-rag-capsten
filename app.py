@@ -127,11 +127,12 @@ if user_query:
 
   # 2. Fast Streaming Generation with Groq
   llm = ChatGroq(
-      model="llama-3.1-8b-instant",
-      api_key=groq_key,
-      temperature=0.0,
-      streaming=True,
+    model="openai/gpt-oss-20b",
+    api_key=groq_key,
+    temperature=0.0,
+    streaming=True,
   )
+    
 
   prompt = (
       f"Context:\n{doc_context}\n\n"
