@@ -1,6 +1,4 @@
-
-        
-                  import os
+ import os
 import re
 from langchain_groq import ChatGroq
 from pypdf import PdfReader
@@ -13,23 +11,13 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# -------------------------------------------------------------
-# Responsive Mobile-First Styling
-# -------------------------------------------------------------
+# Responsive Dark Styling
 st.markdown(
     """
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-    
-    * {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    }
-    
-    .stApp {
-        background-color: #0b0f19;
-        color: #f3f4f6;
-    }
-    
+    * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+    .stApp { background-color: #0b0f19; color: #f3f4f6; }
     .hero-container {
         padding: 1.25rem;
         background: #111827;
@@ -37,7 +25,6 @@ st.markdown(
         border-radius: 14px;
         margin-bottom: 1.2rem;
     }
-    
     .hero-header-row {
         display: flex;
         align-items: center;
@@ -45,7 +32,6 @@ st.markdown(
         gap: 8px;
         flex-wrap: wrap;
     }
-
     .hero-title {
         font-size: clamp(1.25rem, 5vw, 1.85rem) !important;
         font-weight: 800 !important;
@@ -55,14 +41,12 @@ st.markdown(
         word-break: keep-all;
         white-space: nowrap;
     }
-    
     .hero-subtitle {
         color: #9ca3af;
         font-size: 0.85rem;
         margin-top: 0.35rem;
         line-height: 1.4;
     }
-    
     .status-badge {
         background: rgba(16, 185, 129, 0.15);
         color: #34d399;
@@ -73,7 +57,6 @@ st.markdown(
         font-weight: 600;
         white-space: nowrap;
     }
-
     .stChatMessage {
         border-radius: 12px !important;
         background: #111827 !important;
@@ -81,7 +64,6 @@ st.markdown(
         margin-bottom: 8px !important;
         padding: 10px 14px !important;
     }
-
     .source-tag {
         display: inline-block;
         font-size: 0.72rem;
@@ -93,7 +75,6 @@ st.markdown(
         border: 1px solid rgba(96, 165, 250, 0.3);
         font-weight: 500;
     }
-
     .stButton > button {
         border-radius: 10px;
         border: 1px solid #374151;
@@ -102,18 +83,12 @@ st.markdown(
         font-size: 0.82rem;
         padding: 0.45rem 0.8rem;
     }
-    .stButton > button:hover {
-        border-color: #60a5fa;
-        color: #ffffff;
-    }
+    .stButton > button:hover { border-color: #60a5fa; color: #ffffff; }
     </style>
 """,
     unsafe_allow_html=True,
 )
 
-# -------------------------------------------------------------
-# Default Knowledge Base
-# -------------------------------------------------------------
 DEFAULT_POLICIES = [
     {
         "id": "attendance",
@@ -163,7 +138,6 @@ def extract_pdf_chunks(uploaded_file):
     if text:
       full_text += text + "\n"
 
-  # Split text into bite-sized chunks (~400 words each)
   words = full_text.split()
   chunk_size = 350
   chunks = []
@@ -174,7 +148,7 @@ def extract_pdf_chunks(uploaded_file):
         "title": f"{uploaded_file.name} (Part {i//chunk_size + 1})",
         "content": chunk_str,
     })
-  return chunks
+  return chunks if chunks else DEFAULT_POLICIES
 
 
 def score_and_retrieve(query: str, doc_list: list):
@@ -192,9 +166,6 @@ def score_and_retrieve(query: str, doc_list: list):
   return best_doc
 
 
-# -------------------------------------------------------------
-# Sidebar & File Upload
-# -------------------------------------------------------------
 with st.sidebar:
   st.markdown("### ⚙️ **Control Panel**")
   groq_key = os.environ.get("GROQ_API_KEY")
@@ -210,7 +181,7 @@ with st.sidebar:
         "current_pdf_name" not in st.session_state
         or st.session_state.current_pdf_name != uploaded_pdf.name
     ):
-      with st.spinner("Extracting and indexing PDF..."):
+      with st.spinner("Extracting PDF contents..."):
         custom_chunks = extract_pdf_chunks(uploaded_pdf)
         st.session_state.active_docs = custom_chunks
         st.session_state.current_pdf_name = uploaded_pdf.name
@@ -228,7 +199,7 @@ with st.sidebar:
       "What is the minimum attendance required?",
       "Can I take 4 consecutive days of leave?",
       "What are the capstone submission deliverables?",
-      "Summarize the uploaded document.",
+      "Summarize the active document.",
   ]
   for p in presets:
     if st.button(p, use_container_width=True):
@@ -239,9 +210,6 @@ with st.sidebar:
     st.session_state.messages = []
     st.rerun()
 
-# -------------------------------------------------------------
-# Responsive Hero UI
-# -------------------------------------------------------------
 active_source_label = st.session_state.get(
     "current_pdf_name", "Default Policies"
 )
@@ -252,7 +220,7 @@ st.markdown(
             <h1 class="hero-title">NexusDoc AI</h1>
             <span class="status-badge">● Active: {active_source_label[:20]}</span>
         </div>
-        <div class="hero-subtitle">Upload any PDF in the sidebar or ask questions about existing policies.</div>
+        <div class="hero-subtitle">Upload any PDF in the sidebar or query institutional policies.</div>
     </div>
 """,
     unsafe_allow_html=True,
@@ -263,8 +231,7 @@ if "messages" not in st.session_state:
       "role": "assistant",
       "content": (
           "Hello! You can ask questions about our institutional policies or"
-          " upload any custom PDF document in the sidebar to query it"
-          " instantly."
+          " upload any PDF in the sidebar to extract answers from it instantly."
       ),
   }]
 
@@ -284,7 +251,6 @@ if user_prompt:
   with st.chat_message("user"):
     st.markdown(user_prompt)
 
-  # Retrieve relevant context from current active document set
   matched = score_and_retrieve(user_prompt, st.session_state.active_docs)
 
   llm = ChatGroq(
@@ -322,5 +288,4 @@ if user_prompt:
 
   st.session_state.messages.append(
       {"role": "assistant", "content": response_text}
-          )
-    
+  )
