@@ -417,3 +417,4 @@ if user_prompt:
   if audio_data:
     msg_payload["audio_bytes"] = audio_data
   st.session_state.messages.append(msg_payload)
+          
