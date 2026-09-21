@@ -1,7 +1,10 @@
 streamlit
 langchain-groq
+groq
 pypdf
 pillow
+gTTS
+
 
 
 
