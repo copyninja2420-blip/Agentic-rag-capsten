@@ -8,7 +8,7 @@ from pypdf import PdfReader
 import streamlit as st
 
 st.set_page_config(
-    page_title="NexusDoc AI • Vision & RAG Copilot",
+    page_title="NexusDoc AI • Multimodal Copilot",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -210,8 +210,8 @@ with st.sidebar:
   presets = [
       "What is the minimum attendance required?",
       "Can I take 4 consecutive days of leave?",
-      "Describe this character's appearance, pose, and clothing in detail.",
-      "Summarize the key takeaways from the document.",
+      "What are the capstone submission deliverables?",
+      "Summarize the active document.",
   ]
   for p in presets:
     if st.button(p, use_container_width=True):
@@ -220,7 +220,7 @@ with st.sidebar:
   st.markdown("---")
   if st.button("🗑️ Clear Chat History", use_container_width=True):
     st.session_state.messages = []
-    st.session_state.uploaded_image_b64 = None
+    st.session_state.uploaded_image_meta = None
     st.rerun()
 
 # -------------------------------------------------------------
@@ -229,7 +229,7 @@ with st.sidebar:
 if "active_docs" not in st.session_state:
   st.session_state.active_docs = DEFAULT_POLICIES
   st.session_state.current_media_name = "Institutional Policies"
-  st.session_state.uploaded_image_b64 = None
+  st.session_state.uploaded_image_meta = None
 
 active_label = st.session_state.get("current_media_name", "Institutional Policies")
 
@@ -267,7 +267,7 @@ with st.expander(
         chunks = extract_pdf_chunks(uploaded_file)
         st.session_state.active_docs = chunks
         st.session_state.current_media_name = uploaded_file.name
-        st.session_state.uploaded_image_b64 = None
+        st.session_state.uploaded_image_meta = None
         st.success(f"Indexed PDF '{uploaded_file.name}' successfully!")
         st.rerun()
 
@@ -278,33 +278,32 @@ with st.expander(
           caption=f"Uploaded Image: {uploaded_file.name}",
           use_container_width=True,
       )
-      uploaded_file.seek(0)
-      img_bytes = uploaded_file.read()
-      b64_img = base64.b64encode(img_bytes).decode("utf-8")
-      st.session_state.uploaded_image_b64 = (
-          f"data:image/{file_ext};base64,{b64_img}"
-      )
+      width, height = image.size
       st.session_state.current_media_name = uploaded_file.name
+      st.session_state.uploaded_image_meta = (
+          f"Image Name: {uploaded_file.name}, Dimensions: {width}x{height},"
+          f" Format: {file_ext.upper()}"
+      )
       st.session_state.active_docs = [{
           "id": "image_doc",
-          "title": f"Image Analysis: {uploaded_file.name}",
+          "title": f"Image: {uploaded_file.name}",
           "content": (
-              f"User uploaded image: {uploaded_file.name}. Visual features are"
-              " provided directly to the vision model."
+              f"The user has uploaded an image asset: {uploaded_file.name},"
+              f" size {width}x{height}. Analyze queries regarding this graphic,"
+              " asset specifications, styling, or related design advice."
           ),
       }]
 
     elif file_ext in ["mp4", "mov"]:
       st.video(uploaded_file)
       st.session_state.current_media_name = uploaded_file.name
-      st.session_state.uploaded_image_b64 = None
+      st.session_state.uploaded_image_meta = None
       st.session_state.active_docs = [{
           "id": "video_doc",
           "title": f"Video: {uploaded_file.name}",
           "content": (
-              f"User uploaded video: {uploaded_file.name}. Answer user"
-              " questions related to the file details or general technical"
-              " queries."
+              f"User uploaded video: {uploaded_file.name}. Assist with video"
+              " production, integration, or project queries."
           ),
       }]
 
@@ -314,7 +313,7 @@ if "messages" not in st.session_state:
       "role": "assistant",
       "content": (
           "Hello! You can ask questions about our guidelines, upload documents,"
-          " or upload images/photos for instant visual analysis."
+          " or upload images/videos for project and technical guidance."
       ),
   }]
 
@@ -338,74 +337,46 @@ if user_prompt:
 
   matched = score_and_retrieve(user_prompt, st.session_state.active_docs)
 
-  # Check if an image is currently loaded for Vision Processing
-  has_image = bool(st.session_state.get("uploaded_image_b64"))
+  # Ultra-fast, highly reliable LLM
+  llm = ChatGroq(
+      model="openai/gpt-oss-20b",
+      api_key=groq_key,
+      temperature=0.2,
+      streaming=True,
+  )
 
-  if has_image:
-    llm = ChatGroq(
-        model="llama-3.2-11b-vision-preview",
-        api_key=groq_key,
-        temperature=0.2,
-        streaming=True,
-    )
-    # Construct Multimodal Vision Message
-    messages_payload = [
-        SystemMessage(
-            content=(
-                "You are an expert Vision Copilot. Analyze the attached image"
-                " accurately, describing objects, clothing, textures, text, and"
-                " styling in clear detail."
-            )
-        ),
-        HumanMessage(
-            content=[
-                {"type": "text", "text": user_prompt},
-                {
-                    "type": "image_url",
-                    "image_url": {"url": st.session_state.uploaded_image_b64},
-                },
-            ]
-        ),
-    ]
-    source_label = f"Visual Inspection: {st.session_state.current_media_name}"
-  else:
-    llm = ChatGroq(
-        model="openai/gpt-oss-20b",
-        api_key=groq_key,
-        temperature=0.1,
-        streaming=True,
-    )
-    # Multi-Turn Text Memory Payload (Includes recent history context)
-    history_context = "\n".join([
-        f"{m['role'].capitalize()}: {m['content']}"
-        for m in st.session_state.messages[-4:-1]
-    ])
+  # Construct multi-turn context cleanly
+  history_context = "\n".join([
+      f"{m['role'].capitalize()}: {m['content']}"
+      for m in st.session_state.messages[-4:-1]
+  ])
 
-    system_instruction = (
-        "You are an intelligent Copilot and technical assistant.\n\n"
-        f"Context Source: {matched['title']}\n"
-        f"Context Excerpt:\n{matched['content']}\n\n"
-        f"Conversation History:\n{history_context}\n\n"
-        f"User Question: {user_prompt}\n\n"
-        "Instructions:\n"
-        "1. If the question relates to the document or policy context, base"
-        " your answer strictly on that context.\n"
-        "2. If the user asks a general coding, engineering, or design question,"
-        " answer helpfully using your technical knowledge."
-    )
-    messages_payload = [HumanMessage(content=system_instruction)]
-    source_label = matched["title"]
+  system_prompt = (
+      "You are an intelligent Multimodal Copilot and technical assistant.\n\n"
+      f"Context Source: {matched['title']}\n"
+      f"Context Excerpt:\n{matched['content']}\n\n"
+      f"Conversation History:\n{history_context}\n\n"
+      f"User Question: {user_prompt}\n\n"
+      "Instructions:\n"
+      "1. If the question relates to the provided document or policy context,"
+      " base your answer strictly on that context.\n"
+      "2. If the user asks a design, 3D modeling, coding, or technical question"
+      " regarding uploaded media, answer helpfully and authoritatively."
+  )
 
   with st.chat_message("assistant"):
     st.markdown(
-        f'<span class="source-tag">📄 Source: {source_label}</span>',
+        f'<span class="source-tag">📄 Source: {matched["title"]}</span>',
         unsafe_allow_html=True,
     )
 
     def stream_generator():
-      for chunk in llm.stream(messages_payload):
-        if chunk.content:
-          yield chunk.content
+      try:
+        for chunk in llm.stream(system_prompt):
+          if chunk.content:
+            yield chunk.content
+      except Exception as e:
+        yield f"Notice: Error during streaming ({str(e)}). Please verify your Groq API key."
 
     response_text = st.write_stream(stream_generator())
 
