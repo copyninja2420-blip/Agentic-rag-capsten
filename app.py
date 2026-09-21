@@ -1,15 +1,17 @@
 import base64
+import io
 import os
 import re
-from langchain_core.messages import HumanMessage, SystemMessage
+from groq import Groq
+from gtts import gTTS
 from langchain_groq import ChatGroq
 from PIL import Image
 from pypdf import PdfReader
 import streamlit as st
 
 st.set_page_config(
-    page_title="NexusDoc AI • Multimodal Copilot",
-    page_icon="⚡",
+    page_title="NexusDoc AI • Voice & Multimodal Copilot",
+    page_icon="🎙️",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -196,17 +198,29 @@ def score_and_retrieve(query: str, doc_list: list):
   return best_doc
 
 
+def text_to_audio_bytes(text: str):
+  # Clean markdown syntax for speech
+  clean_text = re.sub(r"[*#_`\[\]()]", "", text)
+  tts = gTTS(text=clean_text[:400], lang="en", slow=False)
+  audio_fp = io.BytesIO()
+  tts.write_to_fp(audio_fp)
+  audio_fp.seek(0)
+  return audio_fp
+
+
 # -------------------------------------------------------------
 # Sidebar Configuration
 # -------------------------------------------------------------
 with st.sidebar:
-  st.markdown("### ⚙️ **Settings & Prompts**")
+  st.markdown("### ⚙️ **Settings & Voice Config**")
   groq_key = os.environ.get("GROQ_API_KEY")
   if not groq_key:
     groq_key = st.text_input("Enter Groq API Key:", type="password")
 
+  enable_tts = st.toggle("🔊 Enable Voice Responses (TTS)", value=True)
+
   st.markdown("---")
-  st.markdown("**Suggested Quick Prompts:**")
+  st.markdown("**Suggested Prompts:**")
   presets = [
       "What is the minimum attendance required?",
       "Can I take 4 consecutive days of leave?",
@@ -224,7 +238,7 @@ with st.sidebar:
     st.rerun()
 
 # -------------------------------------------------------------
-# Main Header & Universal Media Uploader
+# Main Header & Media Uploader
 # -------------------------------------------------------------
 if "active_docs" not in st.session_state:
   st.session_state.active_docs = DEFAULT_POLICIES
@@ -238,10 +252,10 @@ st.markdown(
     <div class="hero-container">
         <div class="hero-header-row">
             <div class="brand-group">
-                <div class="brand-avatar">N</div>
+                <div class="brand-avatar">🎙️</div>
                 <div>
-                    <h1 class="hero-title">NexusDoc AI</h1>
-                    <div class="hero-subtitle">Vision & RAG Copilot • <b>Active:</b> {active_label[:26]}</div>
+                    <h1 class="hero-title">NexusDoc Voice AI</h1>
+                    <div class="hero-subtitle">Voice-Enabled RAG Copilot • <b>Active:</b> {active_label[:26]}</div>
                 </div>
             </div>
             <span class="status-badge">● Online</span>
@@ -281,16 +295,14 @@ with st.expander(
       width, height = image.size
       st.session_state.current_media_name = uploaded_file.name
       st.session_state.uploaded_image_meta = (
-          f"Image Name: {uploaded_file.name}, Dimensions: {width}x{height},"
-          f" Format: {file_ext.upper()}"
+          f"Image: {uploaded_file.name} ({width}x{height})"
       )
       st.session_state.active_docs = [{
           "id": "image_doc",
           "title": f"Image: {uploaded_file.name}",
           "content": (
-              f"The user has uploaded an image asset: {uploaded_file.name},"
-              f" size {width}x{height}. Analyze queries regarding this graphic,"
-              " asset specifications, styling, or related design advice."
+              f"The user uploaded an image: {uploaded_file.name}, size"
+              f" {width}x{height}."
           ),
       }]
 
@@ -301,30 +313,46 @@ with st.expander(
       st.session_state.active_docs = [{
           "id": "video_doc",
           "title": f"Video: {uploaded_file.name}",
-          "content": (
-              f"User uploaded video: {uploaded_file.name}. Assist with video"
-              " production, integration, or project queries."
-          ),
+          "content": f"User uploaded video: {uploaded_file.name}.",
       }]
+
+# Voice Input Module
+with st.expander("🎤 **Speak with Voice (Tap to Record)**", expanded=False):
+  voice_audio = st.audio_input("Record your question")
+
+transcribed_voice_prompt = None
+if voice_audio is not None and groq_key:
+  if st.session_state.get("last_processed_audio") != voice_audio:
+    with st.spinner("Transcribing your speech via Groq Whisper..."):
+      groq_client = Groq(api_key=groq_key)
+      transcription = groq_client.audio.transcriptions.create(
+          file=("audio.wav", voice_audio.read()),
+          model="whisper-large-v3",
+          response_format="text",
+      )
+      transcribed_voice_prompt = str(transcription).strip()
+      st.session_state.last_processed_audio = voice_audio
+      st.info(f'🎙️ You asked: "{transcribed_voice_prompt}"')
 
 # Initialize chat session
 if "messages" not in st.session_state:
   st.session_state.messages = [{
       "role": "assistant",
       "content": (
-          "Hello! You can ask questions about our guidelines, upload documents,"
-          " or upload images/videos for project and technical guidance."
+          "Hello! You can type below, tap **'Speak with Voice'** to ask"
+          " out loud, or upload files."
       ),
   }]
 
 for msg in st.session_state.messages:
   with st.chat_message(msg["role"]):
     st.markdown(msg["content"])
+    if "audio_bytes" in msg:
+      st.audio(msg["audio_bytes"], format="audio/mp3")
 
 prompt_from_chip = st.session_state.pop("pending_prompt", None)
-user_prompt = (
-    st.chat_input("Ask any question or query your media...") or prompt_from_chip
-)
+chat_typed_prompt = st.chat_input("Ask any question or query your media...")
+user_prompt = transcribed_voice_prompt or prompt_from_chip or chat_typed_prompt
 
 if user_prompt:
   if not groq_key:
@@ -337,7 +365,6 @@ if user_prompt:
 
   matched = score_and_retrieve(user_prompt, st.session_state.active_docs)
 
-  # Ultra-fast, highly reliable LLM
   llm = ChatGroq(
       model="openai/gpt-oss-20b",
       api_key=groq_key,
@@ -345,14 +372,13 @@ if user_prompt:
       streaming=True,
   )
 
-  # Construct multi-turn context cleanly
   history_context = "\n".join([
       f"{m['role'].capitalize()}: {m['content']}"
       for m in st.session_state.messages[-4:-1]
   ])
 
   system_prompt = (
-      "You are an intelligent Multimodal Copilot and technical assistant.\n\n"
+      "You are an intelligent Voice-enabled Copilot and technical assistant.\n\n"
       f"Context Source: {matched['title']}\n"
       f"Context Excerpt:\n{matched['content']}\n\n"
       f"Conversation History:\n{history_context}\n\n"
@@ -360,8 +386,7 @@ if user_prompt:
       "Instructions:\n"
       "1. If the question relates to the provided document or policy context,"
       " base your answer strictly on that context.\n"
-      "2. If the user asks a design, 3D modeling, coding, or technical question"
-      " regarding uploaded media, answer helpfully and authoritatively."
+      "2. Keep spoken/voice answers clear, engaging, and direct."
   )
 
   with st.chat_message("assistant"):
@@ -376,11 +401,19 @@ if user_prompt:
           if chunk.content:
             yield chunk.content
       except Exception as e:
-        yield f"Notice: Error during streaming ({str(e)}). Please verify your Groq API key."
+        yield f"Notice: Error during streaming ({str(e)})."
 
     response_text = st.write_stream(stream_generator())
 
-  st.session_state.messages.append(
-      {"role": "assistant", "content": response_text}
-)
-    
+    # Generate Voice Audio (TTS)
+    audio_data = None
+    if enable_tts and response_text:
+      with st.spinner("Generating speech..."):
+        audio_data = text_to_audio_bytes(response_text)
+        st.audio(audio_data, format="audio/mp3", autoplay=True)
+
+  msg_payload = {"role": "assistant", "content": response_text}
+  if audio_data:
+    msg_payload["audio_bytes"] = audio_data
+  st.session_state.messages.append(msg_payload)
+        
