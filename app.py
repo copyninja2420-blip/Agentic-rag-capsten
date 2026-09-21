@@ -9,14 +9,14 @@ from pypdf import PdfReader
 import streamlit as st
 
 st.set_page_config(
-    page_title="NexusDoc AI • Smart Unified Copilot",
+    page_title="NexusDoc AI • Integrated Console",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
 # -------------------------------------------------------------
-# Unified Modern Chatbar Styling
+# Custom Styling: Dock Action Controls to the Chat Input
 # -------------------------------------------------------------
 st.markdown(
     """
@@ -106,24 +106,32 @@ st.markdown(
         font-weight: 500;
     }
 
-    /* Floating Toolbar */
-    .chat-toolbar {
+    /* Fixed Bottom Action Dock */
+    [data-testid="stBottomBlockContainer"] {
+        padding-bottom: 12px !important;
+    }
+    
+    .dock-container {
         display: flex;
         align-items: center;
-        gap: 6px;
-        margin-top: 4px;
+        gap: 8px;
         margin-bottom: 6px;
     }
 
-    .stButton > button {
-        border-radius: 10px;
-        border: 1px solid #374151;
-        background: #1f2937;
-        color: #e5e7eb;
-        font-size: 0.82rem;
-        padding: 0.35rem 0.7rem;
+    /* Compact Pill Buttons */
+    div[data-testid="stPopover"] > button {
+        border-radius: 9999px !important;
+        background: #1f2937 !important;
+        border: 1px solid #374151 !important;
+        color: #f3f4f6 !important;
+        font-size: 0.8rem !important;
+        padding: 0.3rem 0.8rem !important;
+        height: 38px !important;
     }
-    .stButton > button:hover { border-color: #38bdf8; color: #ffffff; }
+    div[data-testid="stPopover"] > button:hover {
+        border-color: #38bdf8 !important;
+        color: #38bdf8 !important;
+    }
     </style>
 """,
     unsafe_allow_html=True,
@@ -224,10 +232,10 @@ with st.sidebar:
   if not groq_key:
     groq_key = st.text_input("Enter Groq API Key:", type="password")
 
-  enable_tts = st.toggle("🔊 Speak Answers Aloud (TTS)", value=True)
+  enable_tts = st.toggle("🔊 Auto Speak Responses", value=True)
 
   st.markdown("---")
-  st.markdown("**Suggested Prompts:**")
+  st.markdown("**Suggested Quick Prompts:**")
   presets = [
       "What is the minimum attendance required?",
       "Can I take 4 consecutive days of leave?",
@@ -246,7 +254,7 @@ with st.sidebar:
     st.rerun()
 
 # -------------------------------------------------------------
-# Session Initialization & Hero
+# Header & Initialization
 # -------------------------------------------------------------
 if "active_docs" not in st.session_state:
   st.session_state.active_docs = DEFAULT_POLICIES
@@ -262,7 +270,7 @@ st.markdown(
                 <div class="brand-avatar">⚡</div>
                 <div>
                     <h1 class="hero-title">NexusDoc AI</h1>
-                    <div class="hero-subtitle">All-in-One Copilot • <b>Source:</b> {active_label[:24]}</div>
+                    <div class="hero-subtitle">Unified Copilot • <b>Source:</b> {active_label[:24]}</div>
                 </div>
             </div>
             <span class="status-badge">● Ready</span>
@@ -272,16 +280,16 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Render Chat History
 if "messages" not in st.session_state:
   st.session_state.messages = [{
       "role": "assistant",
       "content": (
-          "Hello! You can type below, tap **📎 Attach** for files (PDF/images),"
-          " or tap **🎤 Mic** to speak directly."
+          "Hello! Type your question below, tap **📎 Attach** to upload"
+          " documents/media, or tap **🎤 Mic** to talk."
       ),
   }]
 
+# Render Chat Stream
 for msg in st.session_state.messages:
   with st.chat_message(msg["role"]):
     st.markdown(msg["content"])
@@ -289,39 +297,38 @@ for msg in st.session_state.messages:
       st.audio(msg["audio_bytes"], format="audio/mp3")
 
 # -------------------------------------------------------------
-# Integrated Action Bar Directly Above Input
+# Bottom Capsule Dock (Anchored right above input)
 # -------------------------------------------------------------
-col_pop1, col_pop2 = st.columns([1, 1])
+dock_col1, dock_col2, _ = st.columns([0.22, 0.22, 0.56])
 
-with col_pop1:
-  with st.popover("📎 **Attach Media**", use_container_width=True):
+with dock_col1:
+  with st.popover("📎 Attach"):
     uploaded_file = st.file_uploader(
         "Upload PDF, Image, or Video",
         type=["pdf", "png", "jpg", "jpeg", "mp4", "mov"],
-        key="pop_media_uploader",
+        key="compact_uploader",
     )
     if uploaded_file is not None:
       file_ext = uploaded_file.name.split(".")[-1].lower()
-
       if file_ext == "pdf":
         if st.session_state.get("current_media_name") != uploaded_file.name:
           chunks = extract_pdf_chunks(uploaded_file)
           st.session_state.active_docs = chunks
           st.session_state.current_media_name = uploaded_file.name
-          st.success(f"Indexed PDF: {uploaded_file.name}")
-
+          st.success(f"Indexed: {uploaded_file.name}")
       elif file_ext in ["png", "jpg", "jpeg"]:
         img = Image.open(uploaded_file)
         st.image(
-            img, caption=f"Loaded: {uploaded_file.name}", use_container_width=True
+            img,
+            caption=f"Loaded: {uploaded_file.name}",
+            use_container_width=True,
         )
         st.session_state.current_media_name = uploaded_file.name
         st.session_state.active_docs = [{
             "id": "image_doc",
             "title": f"Image: {uploaded_file.name}",
-            "content": f"Image file: {uploaded_file.name}.",
+            "content": f"Image context: {uploaded_file.name}.",
         }]
-
       elif file_ext in ["mp4", "mov"]:
         st.video(uploaded_file)
         st.session_state.current_media_name = uploaded_file.name
@@ -331,14 +338,14 @@ with col_pop1:
             "content": f"Video file: {uploaded_file.name}.",
         }]
 
-with col_pop2:
-  with st.popover("🎤 **Voice Mic**", use_container_width=True):
-    voice_audio = st.audio_input("Speak your query", key="pop_voice_input")
+with dock_col2:
+  with st.popover("🎤 Mic"):
+    voice_audio = st.audio_input("Speak", key="compact_audio_input")
 
 transcribed_voice_prompt = None
 if voice_audio is not None and groq_key:
   if st.session_state.get("last_voice_audio") != voice_audio:
-    with st.spinner("Transcribing voice..."):
+    with st.spinner("Transcribing..."):
       groq_client = Groq(api_key=groq_key)
       transcription = groq_client.audio.transcriptions.create(
           file=("audio.wav", voice_audio.read()),
@@ -348,13 +355,13 @@ if voice_audio is not None and groq_key:
       transcribed_voice_prompt = str(transcription).strip()
       st.session_state.last_voice_audio = voice_audio
 
-# Chat Input Bar
+# Chat Input Field
 prompt_from_chip = st.session_state.pop("pending_prompt", None)
-chat_typed_prompt = st.chat_input("Ask a question, attach media, or speak...")
+chat_typed_prompt = st.chat_input("Type your question or use 📎 / 🎤...")
 user_prompt = transcribed_voice_prompt or prompt_from_chip or chat_typed_prompt
 
 # -------------------------------------------------------------
-# Inference Execution & TTS
+# Model Execution & Streaming
 # -------------------------------------------------------------
 if user_prompt:
   if not groq_key:
@@ -417,4 +424,3 @@ if user_prompt:
   if audio_data:
     msg_payload["audio_bytes"] = audio_data
   st.session_state.messages.append(msg_payload)
-          
